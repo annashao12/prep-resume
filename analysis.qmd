@@ -12,8 +12,12 @@ execute:
 
 library(tidyverse)
 library(gt)
+library(tidybayes)
+library(bayesplot)
+library(readr)
+library(brms)
+library(gtsummary)
 ```
-
 
 ### Background Information
 
@@ -29,20 +33,20 @@ Broad question: Race and employment in the United States
 
 Specific question: Effect of racially-coded names on call-backs in 2020's for adults in Boston and Chicago applying for jobs.
 
-Preceptor Table: 
-  
-  * Units: individuals (or resumes ?) 
-  
-  * (Potential) Outcomes: call-back if black name, call-back if white name   
-  
-  * Causal/predictive: a causal model  
-  
-  * Covariates: sex, zip code (not shown in table)  
-  
-  * Treatment: black name on resume versus white name on resume 
+Preceptor Table:
+
+-   Units: individuals (or resumes ?)
+
+-   (Potential) Outcomes: call-back if black name, call-back if white name
+
+-   Causal/predictive: a causal model
+
+-   Covariates: sex, zip code (not shown in table)
+
+-   Treatment: black name on resume versus white name on resume
 
 ## Example Preceptor Table
-  
+
 ```{r}
 tibble(ID = c("1", "2", "...", "10", "11", "...", "N"),
        attitude_after_control = c("Yes*", "No", "...", "No*", "Yes*", "...", "Yes"),
@@ -68,7 +72,6 @@ tibble(ID = c("1", "2", "...", "10", "11", "...", "N"),
 
 ## Questions for Second Class
 
-
 > What are the units, precisely?
 
 All the people sending out resumes for entry-level positions in Boston and Chicago during 2020 -- 2030 who have names which are associated with a race. So, N is (?) in the thousands.
@@ -92,7 +95,6 @@ Stability means that the relationship between the columns in the Population Tabl
 > What is one reason why representativeness might not hold?
 
 Representativeness, or the lack thereof, concerns two relationship, among the rows in the Population Table. The first is between the Preceptor Table and the other rows. The second is between our data and the other rows. The original data from 2001 was not even real. They did not use real people. They were not sampling from the set of all job seekers. There is no reason to believe that the sorts of made-up-resumes they used are representative of the sorts of people/resumes applying for jobs now.
-
 
 > What is one reason why unconfoundedness might not hold?
 
@@ -123,9 +125,42 @@ tibble(ID = c("1", "2", "...", "10", "11", "...", "N"),
   tab_spanner(label = "Covariate", columns = c(treatment))
 ```
 
+```{r}
+#| label: resume_data
+#| message: false
 
+resume <- read_csv("data/resume.csv", show_col_types = F)
+resume$race <- as.factor(resume$race)
+# resume |> count(call)
+```
 
+```{r}
+#| label: model_creation
+#| cache: true
 
+fit_bern <- brm(formula = `call` ~ `race`,
+                data = resume,
+                family = bernoulli(),
+                refresh = 0,
+                silent = 2, # turn off certain warnings
+                seed = 12)
+# summary(fit_bern)
+# pp_check(fit_bern)
+```
 
+```{r}
+#| label: posterior
+fit_bern |> 
+  add_epred_draws(newdata = tibble(race = c("white", "black"))) |>
+  select(race, .epred) |> 
+  ggplot(aes(x = .epred, fill = race)) + 
+    geom_histogram(bins = 50) +
+    scale_x_continuous(labels = scales::percent_format()) +
+    labs(x = "Probability of Callback",
+         y = NULL,
+         title = "Posterior for Callback Rates",
+         subtitle = "Resumes with white-coded names are much more likely to receive callbacks",
+         fill = "(Likely) Race of\nName on Resume")
+    
+```
 
-  
